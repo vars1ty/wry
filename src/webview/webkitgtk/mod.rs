@@ -258,17 +258,13 @@ impl InnerWebView {
 
     // Enable webgl, webaudio, canvas features as default.
     if let Some(settings) = WebViewExt::settings(&*webview) {
-      settings.set_enable_webgl(true);
+      settings.set_enable_webgl(false);
       settings.set_enable_webaudio(true);
-
-      // Enable clipboard
-      if attributes.clipboard {
-        settings.set_javascript_can_access_clipboard(true);
-      }
+      settings.set_enable_smooth_scrolling(true);
 
       // Enable App cache
-      settings.set_enable_offline_web_application_cache(true);
-      settings.set_enable_page_cache(true);
+      settings.set_enable_offline_web_application_cache(false);
+      settings.set_enable_page_cache(false);
 
       // Set user agent
       settings.set_user_agent(attributes.user_agent.as_deref());
