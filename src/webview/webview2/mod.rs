@@ -10,6 +10,7 @@ use crate::{
 };
 
 use file_drop::FileDropController;
+use url::Url;
 
 use std::{
   collections::HashSet, fmt::Write, iter::once, mem::MaybeUninit, os::windows::prelude::OsStrExt,
@@ -548,7 +549,7 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
                   return match (custom_protocol.1)(&final_request) {
                     Ok(sent_response) => {
                       let content = sent_response.body();
-                      let status_code = sent_response.status().as_u16() as i32;
+                      let status_code = sent_response.status();
 
                       let mut headers_map = String::new();
 
@@ -582,8 +583,10 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
 
                       let response = env.CreateWebResourceResponse(
                         body_sent.as_ref(),
-                        status_code,
-                        PCWSTR::from_raw(encode_wide("OK").as_ptr()),
+                        status_code.as_u16() as i32,
+                        PCWSTR::from_raw(
+                          encode_wide(status_code.canonical_reason().unwrap_or("OK")).as_ptr(),
+                        ),
                         PCWSTR::from_raw(encode_wide(headers_map).as_ptr()),
                       )?;
 
@@ -765,6 +768,16 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
 
   pub fn print(&self) {
     let _ = self.eval("window.print()");
+  }
+
+  pub fn url(&self) -> Url {
+    let mut pwstr = PWSTR::null();
+
+    unsafe { self.webview.Source(&mut pwstr).unwrap() };
+
+    let uri = take_pwstr(pwstr);
+
+    Url::parse(&uri.to_string()).unwrap()
   }
 
   pub fn eval(&self, js: &str) -> Result<()> {
