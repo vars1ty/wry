@@ -1,5 +1,27 @@
 # Changelog
 
+## \[0.22.3]
+
+- On macOS, fix keyinput missing by calling superclass methods.
+  - [e40e55a](https://github.com/tauri-apps/wry/commit/e40e55a41d8d65ceda5e182c8915d37b5698c7b0) On macOS, fix keyinput missing by calling super class methods ([#764](https://github.com/tauri-apps/wry/pull/764)) on 2022-11-21
+
+## \[0.22.2]
+
+- On macOS, add an API to enable or disable backward and forward navigation gestures.
+  - [487dff0](https://github.com/tauri-apps/wry/commit/487dff03a103df999e5e0c6286f75b4d1f419d25) Add the ability to navigate with swipe gesture ([#757](https://github.com/tauri-apps/wry/pull/757)) on 2022-11-16
+  - [1a0ec19](https://github.com/tauri-apps/wry/commit/1a0ec19fd533c853b744c5e2346542d2e1e5805d) Update gesture change file to patch ([#763](https://github.com/tauri-apps/wry/pull/763)) on 2022-11-21
+- On macOS, pass key event to menu if we have one on key press.
+  - [2e5e138](https://github.com/tauri-apps/wry/commit/2e5e1381789c332654a5ffee47d578042a9be87b) On macOS, pass key event to menu on key press ([#760](https://github.com/tauri-apps/wry/pull/760)) on 2022-11-21
+
+## \[0.22.1]
+
+- Fix `WebViewBuilder::with_accept_first_mouse` taking behavior of first initalized webview.
+  - [0647c0e](https://github.com/tauri-apps/wry/commit/0647c0efe131566ffbab0729e9d74355155c3c32) fix(macos): fix `acceptFirstMouse` for subsequent webviews, closes [#751](https://github.com/tauri-apps/wry/pull/751) ([#752](https://github.com/tauri-apps/wry/pull/752)) on 2022-11-13
+- Fix download implementation on macOS older than 11.3.
+  - [e69ddc6](https://github.com/tauri-apps/wry/commit/e69ddc6943770aa8baa02431bb037bbdcb3cbd80) fix(macos): download breaking app on macOS older than 11.3, closes [#755](https://github.com/tauri-apps/wry/pull/755) ([#756](https://github.com/tauri-apps/wry/pull/756)) on 2022-11-15
+- On macOS, remove webview from window's NSView before dropping.
+  - [3d3ea80](https://github.com/tauri-apps/wry/commit/3d3ea80808a327c546d8bbd97e06ef4b8feb32d0) On macOS, remove webview from window's NSView before dropping ([#754](https://github.com/tauri-apps/wry/pull/754)) on 2022-11-14
+
 ## \[0.22.0]
 
 - Added `WebViewAttributes::with_accept_first_mouse` method for macOS.
