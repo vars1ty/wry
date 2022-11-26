@@ -1,5 +1,15 @@
 # Changelog
 
+## \[0.22.5]
+
+- On macOS, fix arrow keys misprint text on textarea.
+  - [3005e54](https://github.com/tauri-apps/wry/commit/3005e5450339c6c3fbc1c7c67ab8008ed39ec864) On macOS, fix arrow keys misprint texts ([#769](https://github.com/tauri-apps/wry/pull/769)) on 2022-11-25
+
+## \[0.22.4]
+
+- On Linux, add `linux-headers` feature flag to fix version regression. The minimum webkit2gtk version remains v2.22.
+  - [cf447f6](https://github.com/tauri-apps/wry/commit/cf447f64451fd8345f21440df31601265e0fde86) On Linux, add header feature flag to fix version regression ([#766](https://github.com/tauri-apps/wry/pull/766)) on 2022-11-24
+
 ## \[0.22.3]
 
 - On macOS, fix keyinput missing by calling superclass methods.
