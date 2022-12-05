@@ -120,7 +120,7 @@ impl InnerWebView {
         };
 
         let _ = options.SetAdditionalBrowserArguments(PCWSTR::from_raw(
-          encode_wide(pl_attrs.additionl_browser_args.unwrap_or_else(|| {
+          encode_wide(pl_attrs.additional_browser_args.unwrap_or_else(|| {
             // remove "mini menu" - See https://github.com/tauri-apps/wry/issues/535
             // and "smart screen" - See https://github.com/tauri-apps/tauri/issues/1345
             "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection".to_string()
@@ -806,6 +806,11 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
 
   pub fn set_background_color(&self, background_color: RGBA) -> Result<()> {
     set_background_color(&self.controller, background_color).map_err(Into::into)
+  }
+
+  pub fn load_url(&self, url: &str) {
+    let url = encode_wide(url);
+    let _ = unsafe { self.webview.Navigate(PCWSTR::from_raw(url.as_ptr())) };
   }
 }
 

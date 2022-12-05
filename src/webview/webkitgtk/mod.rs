@@ -423,6 +423,10 @@ impl InnerWebView {
     ));
     Ok(())
   }
+
+  pub fn load_url(&self, url: &str) {
+    self.webview.load_uri(url)
+  }
 }
 
 pub fn platform_webview_version() -> Result<String> {

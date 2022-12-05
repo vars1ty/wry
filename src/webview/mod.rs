@@ -257,7 +257,7 @@ impl Default for WebViewAttributes {
 #[cfg(windows)]
 #[derive(Default)]
 pub(crate) struct PlatformSpecificWebViewAttributes {
-  additionl_browser_args: Option<String>,
+  additional_browser_args: Option<String>,
 }
 #[cfg(any(
   target_os = "linux",
@@ -592,13 +592,13 @@ pub trait WebViewBuilderExtWindows {
   ///
   /// By default wry passes `--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection`
   /// so if you use this method, you also need to disable these components by yourself if you want.
-  fn with_additionl_browser_args<S: AsRef<str>>(self, additional_args: S) -> Self;
+  fn with_additional_browser_args<S: Into<String>>(self, additional_args: S) -> Self;
 }
 
 #[cfg(windows)]
 impl WebViewBuilderExtWindows for WebViewBuilder<'_> {
-  fn with_additionl_browser_args<S: AsRef<str>>(mut self, additional_args: S) -> Self {
-    self.platform_specific.additionl_browser_args = Some(additional_args.as_ref().to_string());
+  fn with_additional_browser_args<S: Into<String>>(mut self, additional_args: S) -> Self {
+    self.platform_specific.additional_browser_args = Some(additional_args.into());
     self
   }
 }
@@ -745,6 +745,10 @@ impl WebView {
   ///   - On Windows higher than 7: translucent colors are not supported so any alpha value other than `0` will be replaced by `255`
   pub fn set_background_color(&self, background_color: RGBA) -> Result<()> {
     self.webview.set_background_color(background_color)
+  }
+
+  pub fn load_url(&self, url: &str) {
+    self.webview.load_url(url)
   }
 }
 
