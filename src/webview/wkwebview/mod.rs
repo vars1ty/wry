@@ -276,22 +276,6 @@ impl InnerWebView {
               sel!(acceptsFirstMouse:),
               accept_first_mouse as extern "C" fn(&Object, Sel, id) -> BOOL,
             );
-            decl.add_method(
-              sel!(keyDown:),
-              key_down as extern "C" fn(&mut Object, Sel, id),
-            );
-
-            extern "C" fn key_down(this: &mut Object, _sel: Sel, event: id) {
-              unsafe {
-                let app = cocoa::appkit::NSApp();
-                let menu: id = msg_send![app, mainMenu];
-                if !menu.is_null() {
-                  let () = msg_send![menu, performKeyEquivalent: event];
-                }
-
-                let () = msg_send![this, performKeyEquivalent: event];
-              }
-            }
 
             extern "C" fn accept_first_mouse(this: &Object, _sel: Sel, _event: id) -> BOOL {
               unsafe {
@@ -710,10 +694,11 @@ r#"Object.defineProperty(window, 'ipc', {
               key_down as extern "C" fn(&mut Object, Sel, id),
             );
 
-            extern "C" fn key_down(this: &mut Object, _sel: Sel, event: id) {
+            extern "C" fn key_down(_this: &mut Object, _sel: Sel, event: id) {
               unsafe {
-                let superclass: *const Class = msg_send![this, superclass];
-                let () = msg_send![super(this, &*superclass), keyDown: event];
+                let app = cocoa::appkit::NSApp();
+                let menu: id = msg_send![app, mainMenu];
+                let () = msg_send![menu, performKeyEquivalent: event];
               }
             }
 
