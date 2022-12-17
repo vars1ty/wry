@@ -13,7 +13,7 @@ use http::{
 use kuchiki::NodeRef;
 use once_cell::sync::OnceCell;
 use sha2::{Digest, Sha256};
-use std::rc::Rc;
+use std::{borrow::Cow, rc::Rc};
 use tao::platform::android::ndk_glue::{
   jni::{
     errors::Error as JniError,
@@ -66,9 +66,11 @@ impl UnsafeIpc {
 unsafe impl Send for UnsafeIpc {}
 unsafe impl Sync for UnsafeIpc {}
 
-pub struct UnsafeRequestHandler(Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Vec<u8>>>>);
+pub struct UnsafeRequestHandler(
+  Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Cow<'static, [u8]>>>>,
+);
 impl UnsafeRequestHandler {
-  pub fn new(f: Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Vec<u8>>>>) -> Self {
+  pub fn new(f: Box<dyn Fn(Request<Vec<u8>>) -> Option<Response<Cow<'static, [u8]>>>>) -> Self {
     Self(f)
   }
 }
@@ -141,11 +143,8 @@ impl InnerWebView {
     if let Some(u) = url {
       let mut url_string = String::from(u.as_str());
       let name = u.scheme();
-      let schemes = custom_protocols
-        .iter()
-        .map(|(name, _)| name.as_str())
-        .collect::<Vec<_>>();
-      if schemes.contains(&name) {
+      let is_custom_protocol = custom_protocols.iter().any(|(n, _)| n == name);
+      if is_custom_protocol {
         url_string = u
           .as_str()
           .replace(&format!("{}://", name), &format!("https://{}.", name))
@@ -182,11 +181,12 @@ impl InnerWebView {
             {
               if !initialization_scripts.is_empty() {
                 let mut document =
-                  kuchiki::parse_html().one(String::from_utf8_lossy(&response.body()).into_owned());
+                  kuchiki::parse_html().one(String::from_utf8_lossy(response.body()).into_owned());
                 let csp = response.headers_mut().get_mut(CONTENT_SECURITY_POLICY);
                 let mut hashes = Vec::new();
                 with_html_head(&mut document, |head| {
-                  for script in &initialization_scripts {
+                  // iterate in reverse order since we are prepending each script to the head tag
+                  for script in initialization_scripts.iter().rev() {
                     let script_el =
                       NodeRef::new_element(QualName::new(None, ns!(html), "script".into()), None);
                     script_el.append(NodeRef::new_text(script));
@@ -208,7 +208,7 @@ impl InnerWebView {
                   *csp = HeaderValue::from_str(&csp_string).unwrap();
                 }
 
-                *response.body_mut() = document.to_string().as_bytes().to_vec();
+                *response.body_mut() = document.to_string().into_bytes().into();
               }
             }
             return Some(response);

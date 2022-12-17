@@ -15,11 +15,12 @@ use std::{
   collections::hash_map::DefaultHasher,
   hash::{Hash, Hasher},
   rc::Rc,
+  sync::Mutex,
 };
 use url::Url;
 use webkit2gtk::{
-  traits::*, NavigationPolicyDecision, PolicyDecisionType, UserContentInjectedFrames, UserScript,
-  UserScriptInjectionTime, WebView, WebViewBuilder,
+  traits::*, LoadEvent, NavigationPolicyDecision, PolicyDecisionType, UserContentInjectedFrames,
+  UserScript, UserScriptInjectionTime, WebView, WebViewBuilder,
 };
 use webkit2gtk_sys::{
   webkit_get_major_version, webkit_get_micro_version, webkit_get_minor_version,
@@ -42,6 +43,7 @@ pub(crate) struct InnerWebView {
   pub webview: Rc<WebView>,
   #[cfg(any(debug_assertions, feature = "devtools"))]
   is_inspector_open: Arc<AtomicBool>,
+  pending_scripts: Arc<Mutex<Option<Vec<String>>>>,
 }
 
 impl InnerWebView {
@@ -319,6 +321,7 @@ impl InnerWebView {
       webview,
       #[cfg(any(debug_assertions, feature = "devtools"))]
       is_inspector_open,
+      pending_scripts: Arc::new(Mutex::new(Some(Vec::new()))),
     };
 
     // Initialize message handler
@@ -351,6 +354,20 @@ impl InnerWebView {
       w.webview.load_html(&html, Some("http://localhost"));
     }
 
+    let pending_scripts = w.pending_scripts.clone();
+    w.webview.connect_load_changed(move |webview, event| {
+      if let LoadEvent::Committed = event {
+        let mut pending_scripts_ = pending_scripts.lock().unwrap();
+        if let Some(pending_scripts) = &*pending_scripts_ {
+          let cancellable: Option<&Cancellable> = None;
+          for script in pending_scripts {
+            webview.run_javascript(script, cancellable, |_| ());
+          }
+          *pending_scripts_ = None;
+        }
+      }
+    });
+
     Ok(w)
   }
 
@@ -365,8 +382,12 @@ impl InnerWebView {
   }
 
   pub fn eval(&self, js: &str) -> Result<()> {
-    let cancellable: Option<&Cancellable> = None;
-    self.webview.run_javascript(js, cancellable, |_| ());
+    if let Some(pending_scripts) = &mut *self.pending_scripts.lock().unwrap() {
+      pending_scripts.push(js.into());
+    } else {
+      let cancellable: Option<&Cancellable> = None;
+      self.webview.run_javascript(js, cancellable, |_| ());
+    }
     Ok(())
   }
 
