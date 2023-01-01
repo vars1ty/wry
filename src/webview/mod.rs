@@ -48,8 +48,7 @@ use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
 #[cfg(target_os = "windows")]
 use windows::{Win32::Foundation::HWND, Win32::UI::WindowsAndMessaging::DestroyWindow};
 
-use std::borrow::Cow;
-use std::{path::PathBuf, rc::Rc};
+use std::{borrow::Cow, path::PathBuf, rc::Rc};
 
 pub use url::Url;
 
@@ -83,6 +82,8 @@ pub struct WebViewAttributes {
   pub background_color: Option<RGBA>,
   /// Whether load the provided URL to [`WebView`].
   pub url: Option<Url>,
+  /// Headers used when loading the requested `url`.
+  pub headers: Option<http::HeaderMap>,
   /// Whether page zooming by hotkeys is enabled
   ///
   /// ## Platform-specific
@@ -224,6 +225,9 @@ pub struct WebViewAttributes {
   /// This configuration only impacts macOS.
   /// [Documentation](https://developer.apple.com/documentation/webkit/wkwebview/1414995-allowsbackforwardnavigationgestu).
   pub back_forward_navigation_gestures: bool,
+
+  /// Set a handler closure to process the change of the webview's document title.
+  pub document_title_changed_handler: Option<Box<dyn Fn(&Window, String)>>,
 }
 
 impl Default for WebViewAttributes {
@@ -234,6 +238,7 @@ impl Default for WebViewAttributes {
       transparent: false,
       background_color: None,
       url: None,
+      headers: None,
       html: None,
       initialization_scripts: vec![],
       custom_protocols: vec![],
@@ -251,6 +256,7 @@ impl Default for WebViewAttributes {
       zoom_hotkeys_enabled: false,
       accept_first_mouse: false,
       back_forward_navigation_gestures: false,
+      document_title_changed_handler: None,
     }
   }
 }
@@ -433,15 +439,24 @@ impl<'a> WebViewBuilder<'a> {
     self
   }
 
+  /// Load the provided URL with given headers when the builder calling [`WebViewBuilder::build`] to create the
+  /// [`WebView`]. The provided URL must be valid.
+  pub fn with_url_and_headers(mut self, url: &str, headers: http::HeaderMap) -> Result<Self> {
+    self.webview.url = Some(url.parse()?);
+    self.webview.headers = Some(headers);
+    Ok(self)
+  }
+
   /// Load the provided URL when the builder calling [`WebViewBuilder::build`] to create the
   /// [`WebView`]. The provided URL must be valid.
   pub fn with_url(mut self, url: &str) -> Result<Self> {
     self.webview.url = Some(Url::parse(url)?);
+    self.webview.headers = None;
     Ok(self)
   }
 
   /// Load the provided HTML string when the builder calling [`WebViewBuilder::build`] to create the
-  /// [`WebView`]. This will be ignored if `url` is already provided.
+  /// [`WebView`]. This will be ignored if `url` is provided.
   ///
   /// # Warning
   /// The Page loaded from html string will have different Origin on different platforms. And
@@ -574,6 +589,15 @@ impl<'a> WebViewBuilder<'a> {
   /// This configuration only impacts macOS.
   pub fn with_accept_first_mouse(mut self, accept_first_mouse: bool) -> Self {
     self.webview.accept_first_mouse = accept_first_mouse;
+    self
+  }
+
+  /// Set a handler closure to process the change of the webview's document title.
+  pub fn with_document_title_changed_handler(
+    mut self,
+    callback: impl Fn(&Window, String) + 'static,
+  ) -> Self {
+    self.webview.document_title_changed_handler = Some(Box::new(callback));
     self
   }
 
@@ -784,6 +808,10 @@ impl WebView {
 
   pub fn load_url(&self, url: &str) {
     self.webview.load_url(url)
+  }
+
+  pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+    self.webview.load_url_with_headers(url, headers)
   }
 }
 

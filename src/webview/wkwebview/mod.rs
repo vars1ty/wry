@@ -76,6 +76,7 @@ pub(crate) struct InnerWebView {
   // Note that if following functions signatures are changed in the future,
   // all functions pointer declarations in objc callbacks below all need to get updated.
   ipc_handler_ptr: *mut (Box<dyn Fn(&Window, String)>, Rc<Window>),
+  document_title_changed_handler: *mut (Box<dyn Fn(&Window, String)>, Rc<Window>),
   navigation_decide_policy_ptr: *mut Box<dyn Fn(String, bool) -> bool>,
   #[cfg(target_os = "macos")]
   file_drop_ptr: *mut (Box<dyn Fn(&Window, FileDropEvent) -> bool>, Rc<Window>),
@@ -374,6 +375,60 @@ impl InnerWebView {
         let ipc = NSString::new(IPC_MESSAGE_HANDLER_NAME);
         let _: () = msg_send![manager, addScriptMessageHandler:handler name:ipc];
         ipc_handler_ptr
+      } else {
+        null_mut()
+      };
+
+      // Document title changed handler
+      let document_title_changed_handler = if let Some(document_title_changed_handler) =
+        attributes.document_title_changed_handler
+      {
+        let cls = ClassDecl::new("DocumentTitleChangedDelegate", class!(NSObject));
+        let cls = match cls {
+          Some(mut cls) => {
+            cls.add_ivar::<*mut c_void>("function");
+            cls.add_method(
+              sel!(observeValueForKeyPath:ofObject:change:context:),
+              observe_value_for_key_path as extern "C" fn(&Object, Sel, id, id, id, id),
+            );
+            extern "C" fn observe_value_for_key_path(
+              this: &Object,
+              _sel: Sel,
+              key_path: id,
+              of_object: id,
+              _change: id,
+              _context: id,
+            ) {
+              let key = NSString(key_path);
+              if key.to_str() == "title" {
+                unsafe {
+                  let function = this.get_ivar::<*mut c_void>("function");
+                  if !function.is_null() {
+                    let function = &mut *(*function
+                      as *mut (Box<dyn for<'r> Fn(&'r Window, String)>, Rc<Window>));
+                    let title: id = msg_send![of_object, title];
+                    (function.0)(&function.1, NSString(title).to_str().to_string());
+                  }
+                }
+              }
+            }
+            cls.register()
+          }
+          None => class!(DocumentTitleChangedDelegate),
+        };
+
+        let handler: id = msg_send![cls, new];
+        let document_title_changed_handler =
+          Box::into_raw(Box::new((document_title_changed_handler, window.clone())));
+
+        (*handler).set_ivar(
+          "function",
+          document_title_changed_handler as *mut _ as *mut c_void,
+        );
+
+        let _: () = msg_send![webview, addObserver:handler forKeyPath:NSString::new("title") options:0x01 context:nil ];
+
+        document_title_changed_handler
       } else {
         null_mut()
       };
@@ -684,6 +739,7 @@ impl InnerWebView {
         manager,
         pending_scripts,
         ipc_handler_ptr,
+        document_title_changed_handler,
         navigation_decide_policy_ptr,
         #[cfg(target_os = "macos")]
         file_drop_ptr,
@@ -715,7 +771,7 @@ r#"Object.defineProperty(window, 'ipc', {
             w.navigate_to_string(path);
           }
         } else {
-          w.navigate_to_url(url.as_str());
+          w.navigate_to_url(url.as_str(), attributes.headers);
         }
       } else if let Some(html) = attributes.html {
         w.navigate_to_string(&html);
@@ -816,14 +872,25 @@ r#"Object.defineProperty(window, 'ipc', {
   }
 
   pub fn load_url(&self, url: &str) {
-    self.navigate_to_url(url)
+    self.navigate_to_url(url, None)
   }
 
-  fn navigate_to_url(&self, url: &str) {
+  pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+    self.navigate_to_url(url, Some(headers))
+  }
+
+  fn navigate_to_url(&self, url: &str, headers: Option<http::HeaderMap>) {
     // Safety: objc runtime calls are unsafe
     unsafe {
       let url: id = msg_send![class!(NSURL), URLWithString: NSString::new(url)];
-      let request: id = msg_send![class!(NSURLRequest), requestWithURL: url];
+      let request: id = msg_send![class!(NSMutableURLRequest), requestWithURL: url];
+      if let Some(headers) = headers {
+        for (name, value) in headers.iter() {
+          let key = NSString::new(name.as_str());
+          let value = NSString::new(value.to_str().unwrap_or_default());
+          let _: () = msg_send![request, addValue:value.as_ptr() forHTTPHeaderField:key.as_ptr()];
+        }
+      }
       let () = msg_send![self.webview, loadRequest: request];
     }
   }
@@ -935,28 +1002,32 @@ impl Drop for InnerWebView {
     // We need to drop handler closures here
     unsafe {
       if !self.ipc_handler_ptr.is_null() {
-        let _ = Box::from_raw(self.ipc_handler_ptr);
+        drop(Box::from_raw(self.ipc_handler_ptr));
 
         let ipc = NSString::new(IPC_MESSAGE_HANDLER_NAME);
         let _: () = msg_send![self.manager, removeScriptMessageHandlerForName: ipc];
       }
 
+      if !self.document_title_changed_handler.is_null() {
+        drop(Box::from_raw(self.document_title_changed_handler));
+      }
+
       if !self.navigation_decide_policy_ptr.is_null() {
-        let _ = Box::from_raw(self.navigation_decide_policy_ptr);
+        drop(Box::from_raw(self.navigation_decide_policy_ptr));
       }
 
       #[cfg(target_os = "macos")]
       if !self.file_drop_ptr.is_null() {
-        let _ = Box::from_raw(self.file_drop_ptr);
+        drop(Box::from_raw(self.file_drop_ptr));
       }
 
       if !self.download_delegate.is_null() {
-        let _ = self.download_delegate.drop_in_place();
+        drop(self.download_delegate.drop_in_place());
       }
 
       for ptr in self.protocol_ptrs.iter() {
         if !ptr.is_null() {
-          let _ = Box::from_raw(*ptr);
+          drop(Box::from_raw(*ptr));
         }
       }
 
@@ -997,5 +1068,9 @@ impl NSString {
       let bytes = slice::from_raw_parts(bytes as *const u8, len);
       str::from_utf8_unchecked(bytes)
     }
+  }
+
+  fn as_ptr(&self) -> id {
+    self.0
   }
 }

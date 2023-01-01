@@ -21,7 +21,7 @@ use tao::platform::android::ndk_glue::{
     JNIEnv,
   },
   ndk::looper::{FdEvent, ForeignLooper},
-  PACKAGE,
+  JMap, PACKAGE,
 };
 use url::Url;
 
@@ -52,11 +52,19 @@ macro_rules! android_binding {
       jobject
     );
     android_fn!($domain, $package, Ipc, ipc, [JString]);
+    android_fn!(
+      $domain,
+      $package,
+      RustWebChromeClient,
+      handleReceivedTitle,
+      [JObject, JString],
+    );
   };
 }
 
 pub static IPC: OnceCell<UnsafeIpc> = OnceCell::new();
 pub static REQUEST_HANDLER: OnceCell<UnsafeRequestHandler> = OnceCell::new();
+pub static TITLE_CHANGE_HANDLER: OnceCell<UnsafeTitleHandler> = OnceCell::new();
 
 pub struct UnsafeIpc(Box<dyn Fn(&Window, String)>, Rc<Window>);
 impl UnsafeIpc {
@@ -77,6 +85,15 @@ impl UnsafeRequestHandler {
 }
 unsafe impl Send for UnsafeRequestHandler {}
 unsafe impl Sync for UnsafeRequestHandler {}
+
+pub struct UnsafeTitleHandler(Box<dyn Fn(&Window, String)>, Rc<Window>);
+impl UnsafeTitleHandler {
+  pub fn new(f: Box<dyn Fn(&Window, String)>, w: Rc<Window>) -> Self {
+    Self(f, w)
+  }
+}
+unsafe impl Send for UnsafeTitleHandler {}
+unsafe impl Sync for UnsafeTitleHandler {}
 
 pub unsafe fn setup(env: JNIEnv, looper: &ForeignLooper, activity: GlobalRef) {
   // we must create the WebChromeClient here because it calls `registerForActivityResult`,
@@ -138,6 +155,7 @@ impl InnerWebView {
       custom_protocols,
       background_color,
       transparent,
+      headers,
       ..
     } = attributes;
 
@@ -156,6 +174,7 @@ impl InnerWebView {
         devtools,
         background_color,
         transparent,
+        headers,
       }));
     }
 
@@ -224,6 +243,11 @@ impl InnerWebView {
       IPC.get_or_init(move || UnsafeIpc::new(Box::new(i), w));
     }
 
+    let w = window.clone();
+    if let Some(i) = attributes.document_title_changed_handler {
+      TITLE_CHANGE_HANDLER.get_or_init(move || UnsafeTitleHandler::new(i, w));
+    }
+
     Ok(Self { window })
   }
 
@@ -260,7 +284,11 @@ impl InnerWebView {
   }
 
   pub fn load_url(&self, url: &str) {
-    MainPipe::send(WebViewMessage::LoadUrl(url.to_string()));
+    MainPipe::send(WebViewMessage::LoadUrl(url.to_string(), None));
+  }
+
+  pub fn load_url_with_headers(&self, url: &str, headers: http::HeaderMap) {
+    MainPipe::send(WebViewMessage::LoadUrl(url.to_string(), Some(headers)));
   }
 }
 
@@ -319,4 +347,18 @@ fn find_my_class<'a>(
     )?
     .l()?;
   Ok(my_class.into())
+}
+
+fn create_headers_map<'a, 'b>(
+  env: &'a JNIEnv,
+  headers: &http::HeaderMap,
+) -> std::result::Result<JMap<'a, 'b>, JniError> {
+  let obj = env.new_object("java/util/HashMap", "()V", &[])?;
+  let headers_map = JMap::from_env(&env, obj)?;
+  for (name, value) in headers.iter() {
+    let key = env.new_string(name)?;
+    let value = env.new_string(value.to_str().unwrap_or_default())?;
+    headers_map.put(key.into(), value.into())?;
+  }
+  Ok(headers_map)
 }
