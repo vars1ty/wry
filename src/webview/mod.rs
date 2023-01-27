@@ -42,6 +42,7 @@ use wkwebview::*;
 pub(crate) mod webview2;
 #[cfg(target_os = "windows")]
 use self::webview2::*;
+use crate::application::dpi::PhysicalPosition;
 use crate::Result;
 #[cfg(target_os = "windows")]
 use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Controller;
@@ -374,7 +375,9 @@ impl<'a> WebViewBuilder<'a> {
   /// - **Android:** The Android WebView does not provide an API for initialization scripts,
   /// so we prepend them to each HTML head. They are only implemented on custom protocol URLs.
   pub fn with_initialization_script(mut self, js: &str) -> Self {
-    self.webview.initialization_scripts.push(js.to_string());
+    if !js.is_empty() {
+      self.webview.initialization_scripts.push(js.to_string());
+    }
     self
   }
 
@@ -820,9 +823,17 @@ impl WebView {
 #[derive(Debug, Serialize, Clone)]
 pub enum FileDropEvent {
   /// The file(s) have been dragged onto the window, but have not been dropped yet.
-  Hovered(Vec<PathBuf>),
+  Hovered {
+    paths: Vec<PathBuf>,
+    /// The position of the mouse cursor.
+    position: PhysicalPosition<f64>,
+  },
   /// The file(s) have been dropped onto the window.
-  Dropped(Vec<PathBuf>),
+  Dropped {
+    paths: Vec<PathBuf>,
+    /// The position of the mouse cursor.
+    position: PhysicalPosition<f64>,
+  },
   /// The file drop was aborted.
   Cancelled,
 }
