@@ -113,7 +113,7 @@ impl InnerWebView {
           let mut lang = [0; MAX_LOCALE_NAME as usize];
           Globalization::LCIDToLocaleName(
             lcid as u32,
-            &mut lang,
+            Some(&mut lang),
             Globalization::LOCALE_ALLOW_NEUTRAL_NAMES,
           );
 
@@ -548,7 +548,7 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
                       .Read(
                         buffer.as_mut_ptr() as *mut _,
                         buffer.len() as u32,
-                        &mut cb_read,
+                        Some(&mut cb_read),
                       )
                       .ok()?;
 
@@ -608,7 +608,7 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
                           .Write(
                             content.as_ptr() as *const _,
                             content.len() as u32,
-                            cb_write.as_mut_ptr(),
+                            Some(cb_write.as_mut_ptr()),
                           )
                           .is_ok()
                           && cb_write.assume_init() as usize == content.len()
@@ -702,10 +702,9 @@ window.addEventListener('mousemove', (e) => window.chrome.webview.postMessage('_
         if let Some(headers) = attributes.headers {
           load_url_with_headers(&webview, env, &url_string, headers);
         } else {
-          let url = PCWSTR::from_raw(encode_wide(url_string).as_ptr());
           unsafe {
             webview
-              .Navigate(url)
+              .Navigate(PCWSTR::from_raw(encode_wide(url_string).as_ptr()))
               .map_err(webview2_com::Error::WindowsError)?;
           }
         }
